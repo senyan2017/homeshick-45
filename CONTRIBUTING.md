@@ -74,3 +74,34 @@ castlename is passed as an argument?).
 
 You can read about the details of the testing framework in the
 [testing documentation](https://github.com/andsens/homeshick/wiki/Testing).
+
+## Adding or changing commands ##
+
+The command-line front-end is split into three layers with a deliberate
+boundary between them. Keep new work on the correct side of that boundary so
+the entry layer stays small and parsing/dispatch regressions stay easy to spot.
+
+* `bin/homeshick` — a thin entry point. It sources the helpers, seeds the
+  shared globals and calls the parser and dispatcher. It should not need to
+  change when you add a command.
+* `lib/parse.sh` — turns `"$@"` into a resolved request. It owns the **command
+  registry** (`homeshick_command_spec`), the single source of truth for what
+  each command accepts and how it is run. Option handling
+  (`homeshick_apply_option`), combined short-option expansion, per-command
+  argument collection and the "operate on every castle" defaults all live here.
+* `lib/dispatch.sh` — runs the resolved request (once, or once per castle), runs
+  any follow-up step and folds the per-item results into a single exit status.
+* `lib/commands/*.sh` — the individual command implementations.
+
+To **add a command**, add one row to the registry in `lib/parse.sh` and an
+implementation in `lib/commands/`; only an unusual per-item invocation needs a
+small addition to `lib/dispatch.sh`. Do not add another `while`/`case` branch to
+the entry layer.
+
+To **add an option**, add a single case to `homeshick_apply_option` in
+`lib/parse.sh`. Nothing else should need to change.
+
+The parser talks to the dispatcher only through the documented output contract
+at the top of `lib/parse.sh` (`cmd`, `params`, `castle`, `threshhold`, the
+runtime flags, ...). Avoid introducing new globals that reach across this
+boundary.

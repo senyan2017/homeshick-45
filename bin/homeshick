@@ -1,7 +1,27 @@
 #!/usr/bin/env bash
+#
+# homeshick entry point.
+#
+# This script is deliberately thin: it wires together three clearly separated
+# concerns and does nothing clever itself.
+#
+#   lib/parse.sh     turns "$@" into a resolved request (see its output
+#                    contract) and owns the command registry -- the single
+#                    source of truth for what each command accepts and does.
+#   lib/dispatch.sh  runs the resolved request and reduces the results to one
+#                    exit status.
+#   lib/commands/*   the individual command implementations.
+#
+# Adding a command means adding a row to the registry in lib/parse.sh and an
+# implementation in lib/commands/; this file should not need to change.
 
+# The runtime-flag globals below (TALK/SKIP/FORCE/BATCH/VERBOSE) are read by the
+# command implementations in lib/commands/, which are sourced on demand and so
+# are invisible to shellcheck here.
+# shellcheck disable=SC2034
 repos="$HOME/.homesick/repos"
-# Include all helper functions. We will include the required command function later on.
+# Include all helper functions. The command implementation itself is sourced
+# on demand by the dispatcher.
 homeshick=${HOMESHICK_DIR:-$HOME/.homesick/repos/homeshick}
 # shellcheck source=../lib/exit_status.sh
 source "$homeshick/lib/exit_status.sh"
@@ -13,211 +33,46 @@ source "$homeshick/lib/git.sh"
 source "$homeshick/lib/log.sh"
 # shellcheck source=../lib/prompt.sh
 source "$homeshick/lib/prompt.sh"
+# shellcheck source=../lib/parse.sh
+source "$homeshick/lib/parse.sh"
+# shellcheck source=../lib/dispatch.sh
+source "$homeshick/lib/dispatch.sh"
 
-# lots of global variables in here, so just disable SC2034 for the entire file
-# shellcheck disable=SC2034
-true
+# Verify prerequisites and seed the globals the command implementations rely on.
+homeshick_setup_environment() {
+  type git &>/dev/null || err "$EX_SOFTWARE" "git not found in path"
 
-exit_status=$EX_SUCCESS
-
-type git &>/dev/null || err "$EX_SOFTWARE" "git not found in path"
-
-if [[ ! -d $repos ]]; then
-  mkdir -p "$repos"
-fi
-
-# used in pull.sh
-# shellcheck disable=SC2034
-T_START=$(date +%s)
-if [[ -z $GIT_VERSION ]]; then
-  read -r _ _ GIT_VERSION _ < <(command git --version)
-  if [[ ! $GIT_VERSION =~ ([0-9]+)(\.[0-9]+){0,3} ]]; then
-    err "$EX_SOFTWARE" "could not determine git version"
+  if [[ ! -d $repos ]]; then
+    mkdir -p "$repos"
   fi
-fi
 
+  # T_START is used by refresh/pull to decide whether a castle is outdated.
+  # shellcheck disable=SC2034
+  T_START=$(date +%s)
+  if [[ -z $GIT_VERSION ]]; then
+    read -r _ _ GIT_VERSION _ < <(command git --version)
+    if [[ ! $GIT_VERSION =~ ([0-9]+)(\.[0-9]+){0,3} ]]; then
+      err "$EX_SOFTWARE" "could not determine git version"
+    fi
+  fi
+}
+
+# Initialise the parser's output contract (see lib/parse.sh). These globals are
+# the only state shared between parsing, dispatch and the command functions.
+exit_status=$EX_SUCCESS
 TALK=true
 SKIP=false
 FORCE=false
 BATCH=false
 VERBOSE=false
+cmd=''
+params=()
+castle=''
+threshhold=''
+help_cmd=''
 
-# Retrieve all the flags preceeding a subcommand
-while [[ $# -gt 0 ]]; do
-  if [[ $1 =~ ^- ]]; then
-    # Convert combined short options into multiples short options (e.g. `-qb' to `-q -b')
-    if [[ $1 =~ ^-[a-z]{2,} ]]; then
-      param=$1
-      shift
-      set -- "${param:0:2}" "-${param:2}" "$@"
-      unset param
-    fi
-    case $1 in
-      -h | --help)  cmd="help" ; shift; continue ;;
-      -q | --quiet) TALK=false ; shift; continue ;;
-      -s | --skip)  SKIP=true  ; shift; continue ;;
-      -f | --force) FORCE=true ; shift; continue ;;
-      -b | --batch) BATCH=true ; shift; continue ;;
-      -v | --verbose) VERBOSE=true ; shift; continue ;;
-      *)     err "$EX_USAGE" "Unknown option '$1'" ;;
-    esac
-  else
-    break
-  fi
-done
+homeshick_setup_environment
+homeshick_parse_arguments "$@"
+homeshick_run
 
-[[ $# -gt 0 ]] || cmd="help"
-
-# Get the subcommand
-valid_commands=(cd clone generate list ls check updates refresh pull symlink link track help)
-if [[ ! $cmd ]]; then
-  # We actually want literal matching of the rhs here, $1 shouldn't be a regexp
-  # shellcheck disable=SC2076
-  if [[ " ${valid_commands[*]} " =~ " $1 " ]]; then
-    cmd=$1
-    shift
-  fi
-  if [[ ! $cmd ]]; then
-    err "$EX_USAGE" "Unknown command '$1'"
-  fi
-fi
-
-# Get the arguments for the subcommand, also parse flags if there are any left
-while [[ $# -gt 0 ]]; do
-  if [[ $1 =~ ^- ]]; then
-    # Convert combined short options into multiples short options (e.g. `-qb' to `-q -b')
-    if [[ $1 =~ ^-[a-z]{2,} ]]; then
-      param=$1
-      shift
-      set -- "${param:0:2}" "-${param:2}" "$@"
-      unset param
-    fi
-    case $1 in
-      -h | --help)
-        cmd="help"
-        shift; continue ;;
-      -q | --quiet)
-        TALK=false
-        shift; continue ;;
-      -s | --skip)
-        SKIP=true
-        shift; continue ;;
-      -f | --force)
-        FORCE=true
-        shift; continue ;;
-      -b | --batch)
-        BATCH=true
-        shift; continue ;;
-      -v | --verbose)
-        VERBOSE=true
-        shift; continue ;;
-      *)     err "$EX_USAGE" "Unknown option '$1'" ;;
-    esac
-  fi
-
-  case $cmd in
-    cd | clone | generate | check | updates | pull | symlink | link)
-      params+=("$1")
-      shift; continue ;;
-    refresh)
-      [[ ! $threshhold ]] && threshhold=$(($1*86400)) || params+=("$1")
-      shift; continue ;;
-    track)
-      [[ ! $castle ]] && castle=$1 || params+=("$1")
-      shift; continue ;;
-    list | ls) err "$EX_USAGE" "The '$1' command does not take any arguments" ;;
-    help)
-      [[ ! $help_cmd ]] && help_cmd=$1
-      shift; continue;;
-    *) err "$EX_USAGE" "Unknown command '$1'" ;;
-  esac
-done
-
-# If no additional arguments are given, run the subcommand for every castle
-if [[ ${#params[@]} -eq 0 ]]; then
-  case $cmd in
-    check | updates | refresh | pull | symlink | link)
-      while IFS= read -d $'\n' -r name ; do
-        params+=("$name")
-      done < <(list_castle_names) ;;
-    # These commands require parameters, show the help message instead
-    cd | clone | generate | track) help_cmd=$cmd; cmd="help"; exit_status=$EX_USAGE ;;
-  esac
-fi
-
-# Default param for refresh is 7
-[[ ! $threshhold ]] && threshhold=$((7*86400))
-
-# Include the file that implements the invoked command
-case $cmd in
-  cd) ;;
-  symlink)
-    # shellcheck source=../lib/commands/link.sh
-    source "$homeshick/lib/commands/link.sh" ;;
-  updates)
-    # shellcheck source=../lib/commands/check.sh
-    source "$homeshick/lib/commands/check.sh" ;;
-  ls)
-    # shellcheck source=../lib/commands/list.sh
-    source "$homeshick/lib/commands/list.sh" ;;
-  *)
-    # Don't know what will be included, so just disable the rule
-    # shellcheck disable=SC1090
-    source "$homeshick/lib/commands/$cmd.sh" ;;
-esac
-
-case $cmd in
-  list | ls)  list      ;;
-  cd)    help cd        ;; # cd is implemented in the homeshick.{sh,csh} helper script.
-  help)  help $help_cmd ;;
-  *)
-    pull_completed=()
-    for param in "${params[@]}"; do
-      case $cmd in
-        clone)
-          clone "$param" ;;
-        generate)
-          generate "$param" ;;
-        check|updates)
-          (check "$param") ;;
-        refresh)
-          (refresh $threshhold "$param") ;;
-        pull)
-          prev_hash=$(cd "$repos/$param" && git rev-parse HEAD -- 2>/dev/null)
-          (pull "$param")
-          result=$?
-          if [[ $result -eq 0 ]]; then
-            curr_hash=$(cd "$repos/$param" && git rev-parse HEAD --)
-            [[ "$prev_hash" != "$curr_hash" ]] && pull_completed+=("$param")
-          fi
-          (exit $result)
-          ;;
-        symlink|link)
-          symlink "$param" ;;
-        track)
-          track "$castle" "$param" ;;
-      esac
-      result=$?
-      if [[ $result == "$EX_USAGE" ]]; then
-        exit "$EX_USAGE"
-      fi
-      if [[ $exit_status == 0 && $result != 0 ]]; then
-        exit_status=$result
-      fi
-    done
-    case $cmd in
-      clone)
-        symlink_cloned_files "${params[@]}" ;;
-      refresh)
-        pull_outdated $threshhold "${params[@]}" ;;
-      pull)
-        symlink_new_files "${pull_completed[@]}" ;;
-    esac
-    result=$?
-    if [[ $exit_status == 0 && $result != 0 ]]; then
-      exit_status=$result
-    fi
-    ;;
-esac
-
-exit $exit_status
+exit "$exit_status"
