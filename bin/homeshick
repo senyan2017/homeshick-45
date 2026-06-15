@@ -171,52 +171,95 @@ case $cmd in
   cd)    help cd        ;; # cd is implemented in the homeshick.{sh,csh} helper script.
   help)  help $help_cmd ;;
   *)
-    pull_completed=()
+    # Aggregate the worst exit code across all castle iterations.
+    # Priority: higher numeric value wins, except EX_ERR (1) is overridden
+    # by any specific error code (to give CI a more actionable signal).
+    # EX_USAGE still causes an immediate abort (handled inside the loop).
+    update_exit_status() {
+      local new_code=$1
+      if [[ $new_code -eq 0 ]]; then
+        return
+      fi
+      if [[ $exit_status -eq 0 ]]; then
+        exit_status=$new_code
+      elif [[ $new_code -gt 1 && ($exit_status -eq 1 || $new_code -gt $exit_status) ]]; then
+        exit_status=$new_code
+      fi
+    }
+
+    # Temp file to track which castles were successfully pulled.
+    # Needed because pull runs in a subshell and cannot modify parent arrays.
+    pull_completed_file=$(mktemp "${TMPDIR:-/tmp}/homeshick-pull-completed-$$-XXXXXX")
+
     for param in "${params[@]}"; do
       case $cmd in
         clone)
-          clone "$param" ;;
+          (clone "$param")
+          ;;
         generate)
-          generate "$param" ;;
+          (generate "$param")
+          ;;
         check|updates)
-          (check "$param") ;;
+          (check "$param")
+          ;;
         refresh)
-          (refresh $threshhold "$param") ;;
+          (refresh "$threshhold" "$param")
+          ;;
         pull)
           prev_hash=$(cd "$repos/$param" && git rev-parse HEAD -- 2>/dev/null)
           (pull "$param")
           result=$?
           if [[ $result -eq 0 ]]; then
-            curr_hash=$(cd "$repos/$param" && git rev-parse HEAD --)
-            [[ "$prev_hash" != "$curr_hash" ]] && pull_completed+=("$param")
+            curr_hash=$(cd "$repos/$param" && git rev-parse HEAD -- 2>/dev/null)
+            if [[ "$prev_hash" != "$curr_hash" ]]; then
+              printf '%s\n' "$param" >> "$pull_completed_file"
+            fi
           fi
           (exit $result)
           ;;
         symlink|link)
-          symlink "$param" ;;
+          (symlink "$param")
+          ;;
         track)
-          track "$castle" "$param" ;;
+          (track "$castle" "$param")
+          ;;
       esac
       result=$?
       if [[ $result == "$EX_USAGE" ]]; then
+        rm -f "$pull_completed_file" "$pull_completed_file.tmp"
         exit "$EX_USAGE"
       fi
-      if [[ $exit_status == 0 && $result != 0 ]]; then
-        exit_status=$result
-      fi
+      update_exit_status "$result"
     done
+
+    # Post-loop actions: symlink new files after clone/pull/refresh
     case $cmd in
       clone)
-        symlink_cloned_files "${params[@]}" ;;
+        symlink_cloned_files "${params[@]}"
+        result=$?
+        update_exit_status "$result"
+        ;;
       refresh)
-        pull_outdated $threshhold "${params[@]}" ;;
+        pull_outdated "$threshhold" "${params[@]}"
+        result=$?
+        update_exit_status "$result"
+        ;;
       pull)
-        symlink_new_files "${pull_completed[@]}" ;;
+        pull_completed=()
+        if [[ -s "$pull_completed_file" ]]; then
+          while IFS= read -r name; do
+            pull_completed+=("$name")
+          done < "$pull_completed_file"
+        fi
+        rm -f "$pull_completed_file"
+        symlink_new_files "${pull_completed[@]}"
+        result=$?
+        update_exit_status "$result"
+        ;;
+      *)
+        rm -f "$pull_completed_file"
+        ;;
     esac
-    result=$?
-    if [[ $exit_status == 0 && $result != 0 ]]; then
-      exit_status=$result
-    fi
     ;;
 esac
 

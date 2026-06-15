@@ -18,7 +18,8 @@ err() {
     # shellcheck disable=SC2119
     fail
   fi
-  status "$bldred" "error" "$reason" >&2
+  # Always print errors, even in --quiet mode — errors are actionable.
+  critical_status "$bldred" "error" "$reason"
   if [[ $# -gt 0 ]]; then
     printf "%s\n" "$@" >&2
   fi
@@ -36,6 +37,13 @@ status() {
   if $TALK; then
     printf "$1%13s$txtdef %s\n" "$2" "$3"
   fi
+}
+
+# Like status(), but always prints regardless of --quiet.
+# Used for messages the user must see (conflicts, warnings during batch, etc.)
+# Output goes to stderr so it doesn't pollute piped stdout.
+critical_status() {
+  printf "$1%13s$txtdef %s\n" "$2" "$3" >&2
 }
 
 warn() {
@@ -61,7 +69,13 @@ pending() {
 fail() {
   [[ $1 ]] && pending_status=$1
   [[ $2 ]] && pending_message=$2
-  status "\r$bldred" "$pending_status" "$pending_message"
+  if $TALK; then
+    status "\r$bldred" "$pending_status" "$pending_message"
+  elif [[ $pending_status ]]; then
+    # Even in quiet mode, overwrite any pending line that may have been printed
+    # before TALK was suppressed (e.g. by prompt_no temporarily enabling TALK)
+    critical_status "\r$bldred" "$pending_status" "$pending_message"
+  fi
   unset pending_status pending_message
 }
 

@@ -30,7 +30,7 @@ printf "homes\e[1;34mh\e[0mick uses git in concert with symlinks to track your p
   updates # Alias to check
 
  Runtime options:
-   -q, [--quiet]    # Suppress status output
+   -q, [--quiet]    # Suppress status output (errors and conflicts still shown)
    -s, [--skip]     # Skip files that already exist
    -f, [--force]    # Overwrite files that already exist
    -b, [--batch]    # Batch-mode: Skip interactive prompts / Choose the default
@@ -39,6 +39,27 @@ printf "homes\e[1;34mh\e[0mick uses git in concert with symlinks to track your p
  Note:
   To check, refresh, pull or symlink all your castles
   simply omit the CASTLE argument
+
+ Exit codes:
+  0   Success
+  1   General error (castle not found, file not found, etc.)
+  64  Usage error (unknown command or option)
+  70  Internal error (git command failed)
+  84  Conflict (files skipped due to existing files — needs manual resolution)
+  85  Castle is ahead of upstream
+  86  Castle is behind upstream
+  87  Refresh threshold exceeded
+  88  Castle has modified files
+
+ Mode interactions:
+  --batch  Uses the default answer for all prompts (No for link conflicts,
+           Yes for refresh pull prompts). Combined with --quiet, all prompts
+           are auto-answered silently — check exit codes for results.
+  --skip   Files that already exist are left untouched and reported as
+           skipped. The exit code is 84 (EX_CONFLICT) if any were skipped.
+  --force  Existing files are silently overwritten. No conflict exit code.
+  --quiet  Suppresses informational output but errors, conflicts, and
+           warnings are still shown to aid troubleshooting.
 
 "
 }

@@ -101,7 +101,7 @@ track() {
       continue
     elif [[ $status != 0 ]]; then
       fail 'track' "Unable to add file to git. Git says: $git_out"
-      exit
+      return "$EX_ERR"
     fi
     success
   done

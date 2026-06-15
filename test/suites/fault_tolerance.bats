@@ -22,14 +22,16 @@ teardown() {
   fixture 'rc-files'
   run homeshick --batch clone "$REPO_FIXTURES/non-existent" "$REPO_FIXTURES/rc-files"
   [ $status -eq 70 ] # EX_SOFTWARE
-  [ ! -d "$HOME/.homesick/repos/rc-files" ] # Should not exist, clone must fail early
+  # With fault-tolerant dispatch, subsequent castles are still processed
+  [ -d "$HOME/.homesick/repos/rc-files" ]
 }
 
 @test 'generate castles with and without naming conflict' {
   castle 'rc-files'
   run homeshick generate rc-files nonexistent
   [ $status -eq 1 ] # EX_ERR
-  [ ! -d "$HOME/.homesick/repos/nonexistent" ] # Should not exist, generate must fail early
+  # With fault-tolerant dispatch, subsequent castles are still processed
+  [ -d "$HOME/.homesick/repos/nonexistent" ]
 }
 
 @test 'link non-existent and existent castle' {

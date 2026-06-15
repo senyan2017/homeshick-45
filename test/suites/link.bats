@@ -116,7 +116,8 @@ newline"
 @test 'overwrite prompt skipped when linking and --batch is on' {
   castle 'rc-files'
   touch "$HOME/.bashrc"
-  homeshick --batch link rc-files
+  run homeshick --batch link rc-files
+  [ $status -eq 84 ] # EX_CONFLICT — .bashrc was skipped
   [ -f "$HOME/.bashrc" ]
   [ ! -L "$HOME/.bashrc" ]
 }
@@ -142,7 +143,8 @@ EOF
 @test "don't overwrite file or prompt for it when linking and --skip is on" {
   castle 'rc-files'
   touch "$HOME/.bashrc"
-  homeshick --skip link rc-files
+  run homeshick --skip link rc-files
+  [ $status -eq 84 ] # EX_CONFLICT — .bashrc was skipped
   [ -f "$HOME/.bashrc" ] && [ ! -L "$HOME/.bashrc" ]
 }
 

@@ -39,9 +39,12 @@ prompt_no() {
   local batch_default=${4:-2}
   local result=-1
 
-  # global vars
+  # Always show the prompt message, even in quiet mode.
+  # Conflicts and important prompts must remain visible so that users and
+  # automation can diagnose issues (exit code alone is not always enough).
+  # We use printf directly instead of status() to bypass the TALK check.
   # shellcheck disable=SC2154
-  status "$bldwht" "$status" "$message"
+  printf "$bldwht%13s$txtdef %s\n" "$status" "$message"
   if ! $BATCH; then
     pending "$prompt" "[yN] "
     while true; do
@@ -75,6 +78,12 @@ prompt_no() {
       local response_txt
       response_txt=$(if [[ $result == 0 ]]; then echo Yes; else echo No; fi)
       pending "$prompt" "BATCH - $response_txt"
+    else
+      # In quiet+batch mode, still show the result so that
+      # skipped conflicts are not completely invisible
+      local response_txt
+      response_txt=$(if [[ $result == 0 ]]; then echo Yes; else echo No; fi)
+      printf "$bldwht%13s$txtdef %s\n" "$prompt" "BATCH - $response_txt"
     fi
   fi
   if [[ $result == 0 ]]; then

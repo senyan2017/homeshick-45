@@ -13,6 +13,7 @@ symlink() {
     fi
     return "$EX_SUCCESS"
   fi
+  local had_conflict=false
   # Run through the repo files using process substitution.
   # The get_repo_files call is at the bottom of this loop.
   # We set the IFS to nothing and the separator for `read' to NUL so that we
@@ -55,10 +56,18 @@ symlink() {
           fi
           continue
         elif $SKIP; then
-          ignore 'exists' "$relpath"
+          # Always show skipped conflicts — they need manual resolution
+          # shellcheck disable=SC2154
+          printf "\r$bldblu%13s$txtdef %s\n" "exists" "$relpath"
+          had_conflict=true
           continue
         elif ! $FORCE; then
-          prompt_no 'conflict' "$relpath exists" "overwrite?" || continue
+          if prompt_no 'conflict' "$relpath exists" "overwrite?"; then
+            : # user said yes, fall through to delete and recreate
+          else
+            had_conflict=true
+            continue
+          fi
         fi
         # Delete $homepath.
         rm -rf "$homepath"
@@ -77,6 +86,9 @@ symlink() {
     success
   # Fetch the repo files and redirect the output into file descriptor 3
   done 3< <(get_repo_files "$repo")
+  if $had_conflict; then
+    return "$EX_CONFLICT"
+  fi
   return "$EX_SUCCESS"
 }
 

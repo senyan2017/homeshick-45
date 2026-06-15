@@ -74,3 +74,40 @@ castlename is passed as an argument?).
 
 You can read about the details of the testing framework in the
 [testing documentation](https://github.com/andsens/homeshick/wiki/Testing).
+
+### Exit codes and fault tolerance
+
+homeshick defines its exit codes in `lib/exit_status.sh`. When adding or
+modifying commands, keep these conventions in mind:
+
+* **`err()` calls `exit`**, which terminates the current (sub)shell immediately.
+  Each command invocation in the main dispatch loop is wrapped in a subshell
+  `(...)` so that an `err()` call for one castle does not prevent subsequent
+  castles from being processed.
+
+* **Use `return` (not `exit`) for non-fatal statuses.** Command functions
+  should use `return` to signal informational states (e.g., `EX_AHEAD`,
+  `EX_BEHIND`) that the caller may want to aggregate. Reserve `err()` for
+  conditions where continuing makes no sense (e.g., castle not found, git
+  failure).
+
+* **Exit code aggregation.** The main loop in `bin/homeshick` tracks the
+  worst (most severe) exit code across all castle iterations. `EX_USAGE`
+  causes an immediate abort; all other codes are aggregated so that the
+  final exit code reflects the most significant failure.
+
+* **Custom codes (84–88).** These are homeshick-specific informational
+  statuses. If you add a new one, pick a value in the 79–113 range and
+  document it in `lib/exit_status.sh` and `lib/commands/help.sh`.
+
+* **Batch/quiet/skip/force interactions.** When modifying command logic,
+  consider how each mode combination affects behavior:
+  - `--batch` auto-answers prompts with the default (usually "No").
+  - `--quiet` suppresses informational output but errors and conflicts
+    must remain visible (use `critical_status()` or direct `printf`).
+  - `--skip` leaves existing files untouched; report them and return
+    `EX_CONFLICT` (84) so automation can detect unresolved conflicts.
+  - `--force` overwrites existing files silently.
+
+* **Always add regression tests** for new exit-code behavior, especially
+  for partial-success scenarios (some castles succeed, others fail).
