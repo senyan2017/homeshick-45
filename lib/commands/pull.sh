@@ -6,12 +6,48 @@ pull() {
   # repos is a global variable
   # shellcheck disable=SC2154
   local repo="$repos/$castle"
-  pending 'pull' "$castle"
   castle_exists 'pull' "$castle"
   if ! repo_has_upstream "$repo"; then
-    ignore 'no upstream' "Could not pull $castle, it has no upstream"
+    if $DRY_RUN; then
+      dry_run_info 'pull' "would skip $castle (no upstream)"
+    else
+      pending 'pull' "$castle"
+      ignore 'no upstream' "Could not pull $castle, it has no upstream"
+    fi
     return "$EX_SUCCESS"
   fi
+
+  if $DRY_RUN; then
+    # Fetch remote refs (non-destructive: only updates remote-tracking branches)
+    local git_out
+    git_out=$(cd "$repo" && git fetch 2>&1) || true
+
+    local upstream
+    upstream=$(cd "$repo" && git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)
+    local head_hash upstream_hash
+    head_hash=$(cd "$repo" && git rev-parse HEAD 2>/dev/null)
+    upstream_hash=$(cd "$repo" && git rev-parse '@{upstream}' 2>/dev/null)
+
+    if [[ "$head_hash" == "$upstream_hash" ]]; then
+      dry_run_info 'pull' "$castle (already up-to-date)"
+    else
+      local behind_count ahead_count
+      behind_count=$(cd "$repo" && git rev-list --count HEAD..'@{upstream}' 2>/dev/null)
+      ahead_count=$(cd "$repo" && git rev-list --count '@{upstream}'..HEAD 2>/dev/null)
+      local detail="$castle ($upstream"
+      if [[ $behind_count -gt 0 ]]; then
+        detail="$detail, $behind_count commit(s) behind"
+      fi
+      if [[ $ahead_count -gt 0 ]]; then
+        detail="$detail, $ahead_count commit(s) ahead"
+      fi
+      detail="$detail)"
+      dry_run_info 'pull' "$detail"
+    fi
+    return "$EX_SUCCESS"
+  fi
+
+  pending 'pull' "$castle"
 
   local git_out
   git_out=$(cd "$repo" && git pull 2>&1) || \
@@ -30,6 +66,8 @@ pull() {
 }
 
 symlink_new_files() {
+  # Safety: skip entirely in dry-run mode
+  $DRY_RUN && return "$EX_SUCCESS"
   local updated_castles=()
   while [[ $# -gt 0 ]]; do
     local castle=$1

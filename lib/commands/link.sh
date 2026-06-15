@@ -23,6 +23,55 @@ symlink() {
   while IFS= read -d $'\0' -r relpath <&3 ; do
     local repopath="$repo/home/$relpath"
     local homepath="$HOME/$relpath"
+
+    if $DRY_RUN; then
+      # Dry-run mode: report what would happen without making changes.
+      # We intentionally skip create_rel_path here because parent directories
+      # may not exist yet (they would be created during a real run).
+      if [[ -e $homepath || -L $homepath ]]; then
+        # $homepath exists
+        if [[ -L $homepath ]]; then
+          local current_target
+          current_target=$(readlink "$homepath")
+          # Check if it already points to the repo (relative or absolute)
+          if [[ $current_target == */home/$relpath ]]; then
+            # Already correctly symlinked (relative or absolute)
+            if $VERBOSE; then
+              dry_run_info 'identical' "$relpath"
+            fi
+          else
+            # Symlink or file pointing elsewhere
+            if $SKIP; then
+              dry_run_info 'skip' "$relpath (exists)"
+            elif $FORCE; then
+              dry_run_info 'overwrite' "$relpath"
+            else
+              dry_run_info 'conflict' "$relpath (exists, would prompt)"
+            fi
+          fi
+        elif [[ -d $homepath && -d $repopath && ! -L $repopath ]]; then
+          # Both are real directories
+          if $VERBOSE; then
+            dry_run_info 'identical' "$relpath"
+          fi
+        elif $SKIP; then
+          dry_run_info 'skip' "$relpath (exists)"
+        elif $FORCE; then
+          dry_run_info 'overwrite' "$relpath"
+        else
+          dry_run_info 'conflict' "$relpath (exists, would prompt)"
+        fi
+      else
+        # $homepath does not exist
+        if [[ ! -d $repopath || -L $repopath ]]; then
+          dry_run_info 'symlink' "$relpath"
+        else
+          dry_run_info 'directory' "$relpath"
+        fi
+      fi
+      continue
+    fi
+
     local rel_repopath
     rel_repopath=$(create_rel_path "$(dirname "$homepath")/" "$repopath") || return $?
 

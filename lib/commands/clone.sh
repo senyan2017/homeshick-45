@@ -16,6 +16,14 @@ clone() {
   # repos is a global variable
   # shellcheck disable=SC2154
   repo_path=$repos"/"$(repo_basename "$git_repo")
+  if $DRY_RUN; then
+    if test -e "$repo_path"; then
+      dry_run_info 'clone' "would skip $git_repo ($repo_path already exists)"
+    else
+      dry_run_info 'clone' "$git_repo -> $repo_path"
+    fi
+    return "$EX_SUCCESS"
+  fi
   pending 'clone' "$git_repo"
   test -e "$repo_path" && err "$EX_ERR" "$repo_path already exists"
 

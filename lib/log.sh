@@ -8,6 +8,7 @@ bldylw="\e[1;33m" # Yellow - warning
 bldblu="\e[1;34m" # Blue - no action/ignored
 bldcyn="\e[1;36m" # Cyan - pending action
 bldwht="\e[1;37m" # White - info
+bldmag="\e[1;35m" # Magenta - dry-run preview
 
 err() {
   local exit_status=$1
@@ -44,6 +45,10 @@ warn() {
 
 info() {
   status "$bldwht" "$1" "$2"
+}
+
+dry_run_info() {
+  status "$bldmag" "$1" "$2"
 }
 
 pending_status=''

@@ -35,6 +35,7 @@ printf "homes\e[1;34mh\e[0mick uses git in concert with symlinks to track your p
    -f, [--force]    # Overwrite files that already exist
    -b, [--batch]    # Batch-mode: Skip interactive prompts / Choose the default
    -v, [--verbose]  # Verbose-mode: Detailed status output
+   -n, [--dry-run]  # Dry-run: Show what would be done without making changes
 
  Note:
   To check, refresh, pull or symlink all your castles

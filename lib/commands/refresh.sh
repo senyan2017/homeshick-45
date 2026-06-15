@@ -45,14 +45,28 @@ pull_outdated() {
       last_mod=$(stat -c %Y "$fetch_head" 2> /dev/null || stat -f %m "$fetch_head")
       if [[ $((T_START-last_mod)) -gt $threshhold ]]; then
         outdated_castles+=("$castle")
-        ! $BATCH && touch "$fetch_head"
+        ! $BATCH && ! $DRY_RUN && touch "$fetch_head"
       fi
     else
       outdated_castles+=("$castle")
-      ! $BATCH && touch "$fetch_head"
+      ! $BATCH && ! $DRY_RUN && touch "$fetch_head"
     fi
   done
-  ask_pull "${outdated_castles[@]}"
+  if $DRY_RUN; then
+    # In dry-run mode, just report what would happen
+    if [[ ${#outdated_castles[@]} -gt 0 ]]; then
+      if [[ ${#outdated_castles[@]} == 1 ]]; then
+        dry_run_info 'refresh' "would pull ${outdated_castles[0]} (outdated)"
+      else
+        OIFS=$IFS
+        IFS=,
+        dry_run_info 'refresh' "would pull ${outdated_castles[*]} (outdated)"
+        IFS=$OIFS
+      fi
+    fi
+  else
+    ask_pull "${outdated_castles[@]}"
+  fi
   return "$EX_SUCCESS"
 }
 

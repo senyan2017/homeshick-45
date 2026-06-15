@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 ask_symlink() {
+  # Safety: skip entirely in dry-run mode
+  $DRY_RUN && return "$EX_SUCCESS"
   if [[ $# -gt 0 ]]; then
     if [[ $# == 1 ]]; then
       msg="The castle $1 has new files."

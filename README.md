@@ -36,6 +36,30 @@ printf '\nalias homeshick source "$HOME/.homesick/repos/homeshick/homeshick.csh"
 echo \n'source "$HOME/.homesick/repos/homeshick/homeshick.fish"' >> "$HOME/.config/fish/config.fish"
 ```
 
+Dry-run (preview mode)
+----------------------
+
+Before running homeshick on a new machine or in a batch deployment, you can preview
+what changes would be made without modifying anything on your system:
+
+```sh
+# Preview cloning a castle
+homeshick --dry-run clone user/dotfiles
+
+# Preview which files would be symlinked, skipped, or conflict
+homeshick --dry-run link
+
+# Preview which castles would be pulled and how far behind they are
+homeshick --dry-run pull
+
+# Preview which castles are outdated and would be refreshed
+homeshick --dry-run refresh
+```
+
+The `--dry-run` flag (short form: `-n`) works alongside existing flags like `--skip`,
+`--force`, `--batch`, and `--verbose`. For example, `homeshick -nb link` shows what
+would happen in batch mode with the default answers, without touching any files.
+
 Contributing
 ------------
 
