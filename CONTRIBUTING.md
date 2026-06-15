@@ -49,6 +49,30 @@ Use the supplied [editorconfig](http://editorconfig.org) file.
 Most editors have [editorconfig plugins](http://editorconfig.org/#download)
 to apply these settings.
 
+### Exit status & reporting ###
+homeshick is frequently driven from scripts and CI, so a command must never
+*look* like it finished cleanly while silently leaving a conflict or failure
+behind. Keep these rules intact:
+
+* **Single source of truth.** `record_status` in `bin/homeshick` folds each
+  command's result into the run-wide exit status, and the first non-zero result
+  wins. A command reports its outcome *only* through its own return/exit code –
+  do not reach out and mutate the global exit status from inside a command.
+* **Per-castle isolation.** Multi-castle commands (`check`, `pull`, `refresh`,
+  `link`/`symlink`) run each castle in a subshell, so one castle's fatal error
+  aborts that castle only; the loop continues and the failure is still recorded.
+  `clone` is the deliberate exception: a clone failure fails the whole batch
+  fast (see the `clone non-existent and existent castle` test).
+* **Never overwrite without consent.** When linking, an existing file that
+  blocks a symlink is left untouched unless `--force` (overwrite) or `--skip`
+  (keep) is given. Left unresolved under `--batch`, the command returns
+  `EX_CONFLICT` instead of pretending it succeeded.
+* **Always report the things a script must not miss.** `notify_conflict` and
+  `notify_error` write to stderr regardless of `--quiet`; everything else honours
+  `--quiet`. A silent unresolved conflict is worse than a little extra output.
+* Custom exit codes live in `lib/exit_status.sh` (range 79–113), e.g.
+  `EX_CONFLICT=89` and `EX_CANTCREAT=73`.
+
 ### Content ###
 **Every PR should only contain one feature change, bug fix or typo correction.**
 

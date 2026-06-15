@@ -46,6 +46,19 @@ info() {
   status "$bldwht" "$1" "$2"
 }
 
+# Always-on, stderr-bound status lines for conditions an automated or --quiet run
+# must not miss. Unlike status/ignore/fail (which honour --quiet and write to
+# stdout) these always print and go to stderr, because leaving the user -- or
+# their CI -- unaware of an unresolved conflict or a failed link is far worse
+# than a little extra output.
+notify_conflict() {
+  printf "$bldylw%13s$txtdef %s\n" 'conflict' "$1" >&2
+}
+
+notify_error() {
+  printf "$bldred%13s$txtdef %s\n" 'error' "$1" >&2
+}
+
 pending_status=''
 pending_message=''
 pending() {

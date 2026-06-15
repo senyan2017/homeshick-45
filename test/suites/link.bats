@@ -116,7 +116,10 @@ newline"
 @test 'overwrite prompt skipped when linking and --batch is on' {
   castle 'rc-files'
   touch "$HOME/.bashrc"
-  homeshick --batch link rc-files
+  run homeshick --batch link rc-files
+  # The prompt is skipped, the file is left untouched, but the unresolved
+  # conflict is still flagged so a script/CI does not mistake this for success.
+  [ "$status" -eq 89 ] # EX_CONFLICT
   [ -f "$HOME/.bashrc" ]
   [ ! -L "$HOME/.bashrc" ]
 }

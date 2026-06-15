@@ -20,6 +20,18 @@ true
 
 exit_status=$EX_SUCCESS
 
+# Single source of truth for the run-wide exit status. Every command reports its
+# outcome purely through its own return/exit code; this is the only place that
+# folds those into the status the whole invocation exits with. Policy: the first
+# non-zero result wins, so a wrapping script can always tell that *something*
+# needs attention even when later castles succeed.
+record_status() {
+  local result=$1
+  if [[ $exit_status == 0 && $result != 0 ]]; then
+    exit_status=$result
+  fi
+}
+
 type git &>/dev/null || err "$EX_SOFTWARE" "git not found in path"
 
 if [[ ! -d $repos ]]; then
@@ -193,17 +205,20 @@ case $cmd in
           (exit $result)
           ;;
         symlink|link)
-          symlink "$param" ;;
+          # Run in a subshell so a fatal per-castle error (e.g. a missing castle)
+          # only aborts this castle, not the whole batch -- consistent with how
+          # pull/check/refresh already behave for multi-castle runs.
+          (symlink "$param") ;;
         track)
           track "$castle" "$param" ;;
       esac
       result=$?
+      # A usage error is the caller's mistake and applies to the whole
+      # invocation, so abort immediately rather than trying the next castle.
       if [[ $result == "$EX_USAGE" ]]; then
         exit "$EX_USAGE"
       fi
-      if [[ $exit_status == 0 && $result != 0 ]]; then
-        exit_status=$result
-      fi
+      record_status "$result"
     done
     case $cmd in
       clone)
@@ -214,9 +229,7 @@ case $cmd in
         symlink_new_files "${pull_completed[@]}" ;;
     esac
     result=$?
-    if [[ $exit_status == 0 && $result != 0 ]]; then
-      exit_status=$result
-    fi
+    record_status "$result"
     ;;
 esac
 

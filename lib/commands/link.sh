@@ -7,6 +7,11 @@ symlink() {
   # repos is a global variable
   # shellcheck disable=SC2154
   local repo="$repos/$castle"
+  # Accumulates the worst thing that happened while linking this castle so the
+  # caller (and any wrapping script) gets an accurate exit code instead of a
+  # blanket success. Stays EX_SUCCESS unless a conflict is left unresolved or a
+  # symlink/directory could not be created.
+  local exit_status=$EX_SUCCESS
   if [[ ! -d $repo/home ]]; then
     if $VERBOSE; then
       ignore 'ignored' "$castle"
@@ -57,7 +62,17 @@ symlink() {
         elif $SKIP; then
           ignore 'exists' "$relpath"
           continue
-        elif ! $FORCE; then
+        elif $FORCE; then
+          : # a conflict policy was given; fall through and overwrite below
+        elif $BATCH; then
+          # Non-interactive, and neither --force nor --skip told us what to do
+          # with this conflict. Leave the existing file untouched (we never
+          # destroy data without consent) but report it -- even under --quiet --
+          # and flag the run so automation can tell a conflict needs handling.
+          notify_conflict "$relpath exists, not overwritten (use --force or --skip)"
+          exit_status=$EX_CONFLICT
+          continue
+        else
           prompt_no 'conflict' "$relpath exists" "overwrite?" || continue
         fi
         # Delete $homepath.
@@ -68,16 +83,28 @@ symlink() {
     if [[ ! -d $repopath || -L $repopath ]]; then
       # $repopath is not a real directory so we create a symlink to it
       pending 'symlink' "$relpath"
-      ln -s "$rel_repopath" "$homepath"
+      if ln -s "$rel_repopath" "$homepath" 2>/dev/null; then
+        success
+      else
+        # Don't abort the whole castle on one bad file: record the failure,
+        # surface it (even under --quiet) and keep linking the rest.
+        fail
+        notify_error "Could not symlink $relpath"
+        exit_status=$EX_CANTCREAT
+      fi
     else
       pending 'directory' "$relpath"
-      mkdir "$homepath"
+      if mkdir "$homepath" 2>/dev/null; then
+        success
+      else
+        fail
+        notify_error "Could not create directory $relpath"
+        exit_status=$EX_CANTCREAT
+      fi
     fi
-
-    success
   # Fetch the repo files and redirect the output into file descriptor 3
   done 3< <(get_repo_files "$repo")
-  return "$EX_SUCCESS"
+  return "$exit_status"
 }
 
 # Fetches all files and folders in a repository that are tracked by git

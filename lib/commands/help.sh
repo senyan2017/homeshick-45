@@ -40,6 +40,15 @@ printf "homes\e[1;34mh\e[0mick uses git in concert with symlinks to track your p
   To check, refresh, pull or symlink all your castles
   simply omit the CASTLE argument
 
+ Exit status:
+  homeshick exits non-zero if anything needed attention. In a multi-castle run
+  every castle is attempted and the first non-zero result is what homeshick
+  exits with (later successes do not mask an earlier failure).
+  When linking, an existing file that blocks a symlink is never overwritten
+  without consent: pass --force to overwrite or --skip to leave it. Left
+  unresolved under --batch it is reported (even with --quiet) and the run
+  exits non-zero so scripts and CI can detect it.
+
 "
 }
 
@@ -77,6 +86,10 @@ extended_help() {
       ;;
     link|symlink)
       printf "Symlinks all dotfiles from a castle\n"
+      printf "On a conflict (an existing file where a symlink should go) homeshick\n"
+      printf "prompts before overwriting. Use --force to overwrite or --skip to keep\n"
+      printf "the existing file. Under --batch an unresolved conflict is left in place,\n"
+      printf "reported (even with --quiet), and makes homeshick exit non-zero.\n"
       printf "Usage:\n  homeshick %s [CASTLE..]" "$1"
       ;;
     track)
