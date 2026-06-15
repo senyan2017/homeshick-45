@@ -6,6 +6,15 @@ pull() {
   # repos is a global variable
   # shellcheck disable=SC2154
   local repo="$repos/$castle"
+  if $DRYRUN; then
+    castle_exists 'pull' "$castle"
+    if ! repo_has_upstream "$repo"; then
+      ignore 'no upstream' "Could not pull $castle, it has no upstream"
+    else
+      dry_run 'pull' "$castle"
+    fi
+    return "$EX_SUCCESS"
+  fi
   pending 'pull' "$castle"
   castle_exists 'pull' "$castle"
   if ! repo_has_upstream "$repo"; then

@@ -45,11 +45,11 @@ pull_outdated() {
       last_mod=$(stat -c %Y "$fetch_head" 2> /dev/null || stat -f %m "$fetch_head")
       if [[ $((T_START-last_mod)) -gt $threshhold ]]; then
         outdated_castles+=("$castle")
-        ! $BATCH && touch "$fetch_head"
+        ! $BATCH && ! $DRYRUN && touch "$fetch_head"
       fi
     else
       outdated_castles+=("$castle")
-      ! $BATCH && touch "$fetch_head"
+      ! $BATCH && ! $DRYRUN && touch "$fetch_head"
     fi
   done
   ask_pull "${outdated_castles[@]}"

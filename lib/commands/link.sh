@@ -24,18 +24,52 @@ symlink() {
     local repopath="$repo/home/$relpath"
     local homepath="$HOME/$relpath"
     local rel_repopath
-    rel_repopath=$(create_rel_path "$(dirname "$homepath")/" "$repopath") || return $?
+    local rel_repopath_status
+    # Capture stderr together with stdout: on success create_rel_path prints
+    # only the relative path (nothing on stderr); on failure it prints only its
+    # diagnostic. Grabbing stderr here keeps a dry run's expected "parent
+    # missing" message from leaking into the otherwise clean preview output.
+    rel_repopath=$(create_rel_path "$(dirname "$homepath")/" "$repopath" 2>&1)
+    rel_repopath_status=$?
+    if [[ $rel_repopath_status -ne 0 ]]; then
+      # create_rel_path only fails when the parent directory is missing. During
+      # a dry run we never create parent directories, so a deeper entry whose
+      # parent is itself part of the plan lands here - it is, by definition,
+      # something that would be newly created. Report it and move on instead of
+      # aborting the whole preview.
+      if $DRYRUN; then
+        if [[ ! -d $repopath || -L $repopath ]]; then
+          dry_run 'new' "$relpath"
+        else
+          dry_run 'directory' "$relpath"
+        fi
+        continue
+      fi
+      # Genuine failure (not a dry run): surface the diagnostic we captured
+      # above, then abort exactly as before.
+      printf "%s\n" "$rel_repopath" >&2
+      return "$rel_repopath_status"
+    fi
 
     if [[ -e $homepath || -L $homepath ]]; then
       # $homepath exists (but may be a dead symlink)
       if [[ -L $homepath && $(readlink "$homepath") == "$rel_repopath" ]]; then
         # $homepath symlinks to $repopath.
         if $VERBOSE; then
-          ignore 'identical' "$relpath"
+          if $DRYRUN; then
+            dry_run 'identical' "$relpath"
+          else
+            ignore 'identical' "$relpath"
+          fi
         fi
         continue
       elif [[ $(readlink "$homepath") == "$repopath" ]]; then
-        # $homepath is an absolute symlink to $repopath
+        # $homepath is an absolute symlink to $repopath, it would be replaced
+        # with a relative symlink (or a directory, for legacy layouts).
+        if $DRYRUN; then
+          dry_run 'relink' "$relpath"
+          continue
+        fi
         if [[ -d $repopath && ! -L $repopath ]]; then
           # $repopath is a directory, but $homepath is a symlink -> legacy handling.
           rm "$homepath"
@@ -51,11 +85,28 @@ symlink() {
           # $homepath is a directory or a symlinked directory
           # we do not take any action regardless of which it is.
           if $VERBOSE; then
-            ignore 'identical' "$relpath"
+            if $DRYRUN; then
+              dry_run 'identical' "$relpath"
+            else
+              ignore 'identical' "$relpath"
+            fi
           fi
           continue
         elif $SKIP; then
-          ignore 'exists' "$relpath"
+          if $DRYRUN; then
+            dry_run 'skip' "$relpath"
+          else
+            ignore 'exists' "$relpath"
+          fi
+          continue
+        elif $DRYRUN; then
+          # Never prompt or delete during a dry run; just report what the
+          # conflict would lead to given the current flags.
+          if $FORCE; then
+            dry_run 'overwrite' "$relpath"
+          else
+            dry_run 'conflict' "$relpath"
+          fi
           continue
         elif ! $FORCE; then
           prompt_no 'conflict' "$relpath exists" "overwrite?" || continue
@@ -63,6 +114,15 @@ symlink() {
         # Delete $homepath.
         rm -rf "$homepath"
       fi
+    fi
+
+    if $DRYRUN; then
+      if [[ ! -d $repopath || -L $repopath ]]; then
+        dry_run 'new' "$relpath"
+      else
+        dry_run 'directory' "$relpath"
+      fi
+      continue
     fi
 
     if [[ ! -d $repopath || -L $repopath ]]; then

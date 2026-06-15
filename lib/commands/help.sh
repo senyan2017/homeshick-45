@@ -35,10 +35,15 @@ printf "homes\e[1;34mh\e[0mick uses git in concert with symlinks to track your p
    -f, [--force]    # Overwrite files that already exist
    -b, [--batch]    # Batch-mode: Skip interactive prompts / Choose the default
    -v, [--verbose]  # Verbose-mode: Detailed status output
+   -n, [--dry-run]  # Dry-run: Preview changes without writing to disk
 
  Note:
   To check, refresh, pull or symlink all your castles
   simply omit the CASTLE argument
+
+  Add --dry-run (-n) to clone, pull or link to preview the planned
+  changes - what would be added, overwritten or skipped - without
+  touching a single file.
 
 "
 }
@@ -52,6 +57,7 @@ extended_help() {
       ;;
     clone)
       printf "Clones URI as a castle for homeshick\n"
+      printf "Add --dry-run to preview the clone without writing anything to disk.\n"
       printf "Usage:\n  homeshick clone URL.."
       ;;
     generate)
@@ -73,10 +79,12 @@ extended_help() {
       ;;
     pull)
       printf "Updates a castle. Also recurse into submodules.\n"
+      printf "Add --dry-run to preview which castles would be pulled.\n"
       printf "Usage:\n  homeshick pull [CASTLE..]"
       ;;
     link|symlink)
       printf "Symlinks all dotfiles from a castle\n"
+      printf "Add --dry-run to preview which files would be added, overwritten or skipped.\n"
       printf "Usage:\n  homeshick %s [CASTLE..]" "$1"
       ;;
     track)

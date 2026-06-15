@@ -41,6 +41,7 @@ SKIP=false
 FORCE=false
 BATCH=false
 VERBOSE=false
+DRYRUN=false
 
 # Retrieve all the flags preceeding a subcommand
 while [[ $# -gt 0 ]]; do
@@ -59,6 +60,7 @@ while [[ $# -gt 0 ]]; do
       -f | --force) FORCE=true ; shift; continue ;;
       -b | --batch) BATCH=true ; shift; continue ;;
       -v | --verbose) VERBOSE=true ; shift; continue ;;
+      -n | --dry-run) DRYRUN=true ; shift; continue ;;
       *)     err "$EX_USAGE" "Unknown option '$1'" ;;
     esac
   else
@@ -110,6 +112,9 @@ while [[ $# -gt 0 ]]; do
         shift; continue ;;
       -v | --verbose)
         VERBOSE=true
+        shift; continue ;;
+      -n | --dry-run)
+        DRYRUN=true
         shift; continue ;;
       *)     err "$EX_USAGE" "Unknown option '$1'" ;;
     esac
@@ -219,5 +224,13 @@ case $cmd in
     fi
     ;;
 esac
+
+# After a dry run of the file-touching commands, print a one-line change plan
+# so the whole preview can be eyeballed before committing to a real run.
+if $DRYRUN; then
+  case $cmd in
+    clone | symlink | link) dry_run_summary ;;
+  esac
+fi
 
 exit $exit_status

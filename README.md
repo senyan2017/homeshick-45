@@ -36,6 +36,24 @@ printf '\nalias homeshick source "$HOME/.homesick/repos/homeshick/homeshick.csh"
 echo \n'source "$HOME/.homesick/repos/homeshick/homeshick.fish"' >> "$HOME/.config/fish/config.fish"
 ```
 
+Previewing changes (dry run)
+----------------------------
+
+Before homeshick touches anything on a fresh machine, you can preview exactly
+what it would do by adding `--dry-run` (or `-n`) to `clone`, `link`/`symlink` or `pull`:
+```sh
+homeshick --dry-run clone https://github.com/you/dotfiles.git
+homeshick --dry-run link dotfiles
+```
+Nothing is written to disk. Instead homeshick prints a per-file plan showing
+which files would be **added**, which already-present files would be
+**overwritten** or are in **conflict**, and which are left untouched, followed
+by a one-line summary. This makes it safe to audit a change plan before rolling
+homeshick out across many machines, rather than backing up the whole box just in case.
+
+`--dry-run` composes with the usual `--force`, `--skip` and `--quiet` flags, so
+e.g. `homeshick -n -f link` previews what a forced run would overwrite.
+
 Contributing
 ------------
 
